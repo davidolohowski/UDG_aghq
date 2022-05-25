@@ -95,6 +95,8 @@ n_s <- nrow(spde$M0)
 nodemean <- rep(0, n_s)
 nodemean_m <- nodemean
 
+plot_ly(x = spv@coords[,1], y = spv@coords[,2], z = GC_color, color = GC_color, size =1)
+
 # ============================================================== Non-marked point process model =============================================================== #
 # # input data for the non-marked point process
 input_data <- list(Apixel = A.pp,

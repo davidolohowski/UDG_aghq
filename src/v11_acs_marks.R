@@ -21,7 +21,7 @@ library(inlabru)
 library(excursions)
 
 # Compile TMB template-- only need to do once
-#compile('src/LGCP_cov_spde.cpp')
+compile('src/LGCP_cov_spde_marks.cpp')
 source('src/inla_mesh_dual.R')
 dyn.load(dynlib(file.path("src/LGCP_cov_spde")))
 dyn.load(dynlib(file.path("src/LGCP_cov_spde_marks")))
@@ -140,96 +140,6 @@ aghqtime <- difftime(Sys.time(),tm,units = 'secs')
 saveRDS(LGCP_fit_no_marks,file = "LGCP_v11_cov_spde_marks/LGCP_v11_non_marked.RDS")
 cat("AGHQ took: ",format(aghqtime),"\n")
 
-# projection matrix at the point locations
-Apix <- inla.mesh.project(v_mesh, loc = spv)$A
-# posterior samples for the random weights
-set.seed(1234)
-LGCP_postsamples <- sample_marginal(LGCP_fit_no_marks,5000)
-post_node <- LGCP_postsamples$samps[8:1459,]
-
-# mean posterior random field from non-marked process at point locations
-post_U <- rowMeans(exp(Apix %*% post_node))
-
-# distribution for the mean posterior spatial random field at point locations
-f_lambda <- ecdf(post_U)
-# distribution for the color
-f_col <- ecdf(GC_color)
-
-# weight assigned to each GC based on their corresponding mean posterior spatial random field
-weight_lam <- f_lambda(post_U)
-# weight assigned to each GC based on their color variation
-weight_col <- f_col(GC_color)
-
-# final weight of each GC color information based on the combined information from color and intensity:
-# (1) lambda high and color variation high: given low weight
-# (2) lambda high and color variation low: given high weight
-# (3) lambda low and color variation high: given high weight
-# (4) lambda low and color variation low: given low weight
-weight <- weight_lam*(1-weight_col) + (1-weight_lam)*weight_col
-
-plot_ly(x = post_U, y = GC_color, z = weight, color = weight, size = 1)
-
-# ============================================================== Weighted marking model ======================================================================= #
-# weighted model for the marks
-input_data <- list(Apixel = A.pp,
-                   spde = spde,
-                   y = y.pp,
-                   A = e.pp,
-                   marks = GC_color,
-                   nu = nu,
-                   gal = gal,
-                   weight = weight,
-                   priormean_intercept = 0,
-                   priorsd_intercept = sqrt(1000),
-                   priormean_beta = rep(0, ncol(gal)),
-                   priorsd_beta = rep(sqrt(1000), ncol(gal)),
-                   priormean_R = c(6.56, 6.8),
-                   priorsd_R = c(0.25, 0.2),
-                   priormean_intercept_m = 0,
-                   priorsd_intercept_m = sqrt(1000),
-                   priormean_beta_m = rep(0, ncol(gal)),
-                   priorsd_beta_m = rep(sqrt(1000), ncol(gal)),
-                   priormean_R_m = c(6.56, 6.8),
-                   priorsd_R_m = c(0.25, 0.2),
-                   priormean_alpha = 1,
-                   priorsd_alpha = sqrt(10),
-                   prior_rho_min = 400,
-                   prior_rho_prob = 0.5,
-                   prior_sigma_max = 1.5,
-                   prior_sigma_prob = 0.5)
-
-parameters <- list(intercept = -11,
-                   beta = c(2,6),
-                   log_R = c(6.56,6.8),
-                   log_a = c(0,0),
-                   intercept_m = -0.15,
-                   beta_m = c(2,6),
-                   log_R_m = c(6.56, 6.8),
-                   log_a_m = c(0,0),
-                   alpha = 1,
-                   log_sigma = log(1.5),
-                   log_rho = log(400),
-                   nodemean = nodemean)
-
-obj <- MakeADFun(
-  data = input_data,
-  parameters = parameters,
-  random = c('nodemean', 'intercept', 'beta', 'log_R', 'log_a',
-             'intercept_m', 'beta_m', 'log_R_m', 'log_a_m'),
-  silent = TRUE,
-  DLL = "LGCP_cov_spde_marks")
-
-tm <- Sys.time()
-cat("Doing AGHQ, time = ",format(tm),"\n")
-LGCP_fit_weight <- aghq::marginal_laplace_tmb(
-  obj,
-  3,
-  startingvalue = c(parameters$alpha, parameters$log_sigma, parameters$log_rho)
-)
-aghqtime <- difftime(Sys.time(),tm,units = 'secs')
-saveRDS(LGCP_fit_weight,file = "LGCP_v11_cov_spde_marks/LGCP_v11_weighted_marks.RDS")
-cat("AGHQ took: ",format(aghqtime),"\n")
-
 # ================================================================= Fully marked model ======================================================================= #
 # full marked point process
 input_data <- list(Apixel = A.pp,
@@ -239,7 +149,6 @@ input_data <- list(Apixel = A.pp,
                    marks = GC_color,
                    nu = nu,
                    gal = gal,
-                   weight = rep(1,length(GC_color)),
                    priormean_intercept = 0,
                    priorsd_intercept = sqrt(1000),
                    priormean_beta = rep(0, ncol(gal)),
@@ -248,10 +157,6 @@ input_data <- list(Apixel = A.pp,
                    priorsd_R = c(0.25, 0.2),
                    priormean_intercept_m = 0,
                    priorsd_intercept_m = sqrt(1000),
-                   priormean_beta_m = rep(0, ncol(gal)),
-                   priorsd_beta_m = rep(sqrt(1000), ncol(gal)),
-                   priormean_R_m = c(6.56, 6.8),
-                   priorsd_R_m = c(0.25, 0.2),
                    priormean_alpha = 1,
                    priorsd_alpha = sqrt(10),
                    prior_rho_min = 400,
@@ -263,11 +168,8 @@ parameters <- list(intercept = -11,
                    beta = c(2,6),
                    log_R = c(6.56,6.8),
                    log_a = c(0,0),
-                   intercept_m = -0.15,
-                   beta_m = c(2,6),
-                   log_R_m = c(6.56, 6.8),
-                   log_a_m = c(0,0),
-                   alpha = 1,
+                   intercept_m = -1.7,
+                   alpha = -1,
                    log_sigma = log(1.5),
                    log_rho = log(400),
                    nodemean = nodemean)
@@ -276,7 +178,7 @@ obj <- MakeADFun(
   data = input_data,
   parameters = parameters,
   random = c('nodemean', 'intercept', 'beta', 'log_R', 'log_a',
-             'intercept_m', 'beta_m', 'log_R_m', 'log_a_m'),
+             'intercept_m'),
   silent = TRUE,
   DLL = "LGCP_cov_spde_marks")
 
@@ -310,25 +212,16 @@ U <- data.frame(x = c(U1[1],U2[1]), y = c(U1[2], U2[2]))
 # projection matrix for the grids
 Apix <- inla.mesh.project(v_mesh, loc = grid)$A
 
+samps1.0 <- sample_marginal(LGCP_fit_marked, 1000)
+post_node1.0 <- samps1.0$samps[9:1460,]
+
+post_U1.0 <- exp(Apix %*% post_node1.0)
+
+
 exc_prob <- data.frame()
 
+set.seed(376823)
 for (i in 1:50) {
-  set.seed(i)
-  # sample from the weighted model
-  LGCP_postsamples <- sample_marginal(LGCP_fit_weight,1000)
-  post_node <- LGCP_postsamples$samps[15:1466,]
-  
-  post_U <- (exp(Apix %*% post_node))
-  sigma <- exp(LGCP_postsamples$thetasamples[[2]])
-  
-  df$mean <- rowMeans(post_U)
-  
-  # excursion functions for the weighted model
-  df$exc0.5 <- excursions.mc(post_U, 0.5, 1, '>')$`F`
-  df$exc0.75 <- excursions.mc(post_U, 0.5, exp(quantile(rnorm(1000, 0, sigma), 0.75)), '>')$`F`
-  df$exc0.9 <- excursions.mc(post_U, 0.5, exp(quantile(rnorm(1000, 0, sigma), 0.9)), '>')$`F`
-  df$exc0.95 <- excursions.mc(post_U, 0.5, exp(quantile(rnorm(1000, 0, sigma), 0.95)), '>')$`F`
-  
   # samples from the non-marked model
   samps0.0 <- sample_marginal(LGCP_fit_no_marks, 1000)
   post_node0.0 <- samps0.0$samps[8:1459,]
@@ -345,7 +238,7 @@ for (i in 1:50) {
   
   # samples from the fully marked model
   samps1.0 <- sample_marginal(LGCP_fit_marked, 1000)
-  post_node1.0 <- samps1.0$samps[15:1466,]
+  post_node1.0 <- samps1.0$samps[9:1460,]
   
   post_U1.0 <- exp(Apix %*% post_node1.0)
   
@@ -363,39 +256,6 @@ for (i in 1:50) {
     mutate(dist1 = sqrt((x - U1[1])^2 + (y - U1[2])^2), dist2 = sqrt((x - U2[1])^2 + (y - U2[2])^2)) %>%
     dplyr::filter(dist1 < 220 | dist2 < 220) %>%
     mutate(U1 = dist1 < 220, U2 = dist2 < 220)
-  
-  # Detection probability for weighted model
-  Fs_0.5_U1 <- Fs %>%
-    filter(U1 == T) %>%
-    summarise(p = max(exc0.5))
-  
-  Fs_0.5_U2 <- Fs %>%
-    filter(U2 == T) %>%
-    summarise(p = max(exc0.5))
-  
-  Fs_0.75_U1 <- Fs %>%
-    filter(U1 == T) %>%
-    summarise(p = max(exc0.75))
-  
-  Fs_0.75_U2 <- Fs %>%
-    filter(U2 == T) %>%
-    summarise(p = max(exc0.75))
-  
-  Fs_0.9_U1 <- Fs %>%
-    filter(U1 == T) %>%
-    summarise(p = max(exc0.9))
-  
-  Fs_0.9_U2 <- Fs %>%
-    filter(U2 == T) %>%
-    summarise(p = max(exc0.9))
-  
-  Fs_0.95_U1 <- Fs %>%
-    filter(U1 == T) %>%
-    summarise(p = max(exc0.95))
-  
-  Fs_0.95_U2 <- Fs %>%
-    filter(U2 == T) %>%
-    summarise(p = max(exc0.95))
   
   # Detection probability for non-marked model
   Fs_0.5_U1_0.0 <- Fs %>%
@@ -465,43 +325,46 @@ for (i in 1:50) {
   
   
   # Compare detection probability between models
-  exc_prob <- bind_rows(exc_prob, data.frame(prob = as.numeric(c(Fs_0.5_U1, Fs_0.75_U1, Fs_0.9_U1, Fs_0.95_U1,
-                                                                 Fs_0.5_U1_0.0, Fs_0.75_U1_0.0, Fs_0.9_U1_0.0, Fs_0.95_U1_0.0,
+  exc_prob <- bind_rows(exc_prob, data.frame(prob = as.numeric(c(Fs_0.5_U1_0.0, Fs_0.75_U1_0.0, Fs_0.9_U1_0.0, Fs_0.95_U1_0.0,
                                                                  Fs_0.5_U1_1.0, Fs_0.75_U1_1.0, Fs_0.9_U1_1.0, Fs_0.95_U1_1.0,
-                                                                 Fs_0.5_U2, Fs_0.75_U2, Fs_0.9_U2, Fs_0.95_U2,
                                                                  Fs_0.5_U2_0.0, Fs_0.75_U2_0.0, Fs_0.9_U2_0.0, Fs_0.95_U2_0.0,
                                                                  Fs_0.5_U2_1.0, Fs_0.75_U2_1.0, Fs_0.9_U2_1.0, Fs_0.95_U2_1.0)),
-                                             model = rep(c('WMPP', 'PPP', 'MPP', 'WMPP', 'PPP', 'MPP'), each = 4),
-                                             q = rep(c('0.5', '0.75', '0.9', '0.95'), 6),
-                                             ID = rep(c('U1', 'U2'), each = 12)))
+                                             model = rep(c('PPP', 'MPP', 'PPP', 'MPP'), each = 4),
+                                             q = rep(c('0.5', '0.75', '0.9', '0.95'), 4),
+                                             ID = rep(c('U1', 'U2'), each = 8)))
 }
 
 saveRDS(exc_prob, "LGCP_v11_cov_spde_marks/v11_exc_prob.RDS")
 
 df_exc <- exc_prob %>%
   group_by(model, q, ID) %>%
-  summarise(median = median(prob),
+  summarise(mean = median(prob),
             upper = quantile(prob, 0.75),
             lower = quantile(prob, 0.25))
 
-ggplot(df_exc, aes(model, median)) + geom_point(aes(color = q), position = position_dodge(0.5)) + 
+ggplot(df_exc, aes(model, mean)) + geom_point(aes(color = q), position = position_dodge(0.5)) + 
   geom_errorbar(aes(ymin = lower, ymax = upper, color = q), position = position_dodge(0.5), 
                 width = 0.1) + facet_wrap(~ID)
 
-# theBreaks <- c(0.9, 1, 1.025, 1.05, 1.1, 1.15, 1.2, 1.225, 1.25, 1.3, 1.35)
-# theCol = rev(RColorBrewer::brewer.pal(length(theBreaks)-1, 'Spectral'))
-# 
-# ggplot(df, aes(x, y)) +
-#   geom_contour_filled(aes(z = mean), breaks = theBreaks) +
-#   scale_fill_manual(values = theCol, name = '$\\exp(\\mathcal{U}(s))$', guide = guide_legend(reverse = T)) +
-#   coord_fixed() +
-#   geom_point(data = v_acs, aes(x,y), size = 0.1, stroke = 0.25, shape = 20) +
-#   xlab('X (pixels)') + ylab('Y (pixels)') +
-#   theme_minimal() +
-#   theme(legend.text = element_text(size = 7),
-#         legend.title = element_text(size = 8),
-#         strip.background = element_rect(color = NULL, fill = 'white', linetype = 'blank'))
-# 
+theBreaks <- c(0.9, 1, 1.025, 1.05, 1.1, 1.15, 1.2, 1.225, 1.25, 1.3, 1.35)
+theCol = rev(RColorBrewer::brewer.pal(length(theBreaks)-1, 'Spectral'))
+
+df$mean <- rowMeans(post_U1.0)
+
+ggplot(df, aes(x, y)) +
+  geom_contour_filled(aes(z = mean), breaks = theBreaks) +
+  scale_fill_manual(values = theCol, name = '$\\exp(\\mathcal{U}(s))$', guide = guide_legend(reverse = T)) +
+  coord_fixed() +
+  geom_point(data = v_acs, aes(x,y), size = 0.1, stroke = 0.25, shape = 20) +
+  xlab('X (pixels)') + ylab('Y (pixels)') +
+  theme_minimal() +
+  theme(legend.text = element_text(size = 7),
+        legend.title = element_text(size = 8),
+        strip.background = element_rect(color = NULL, fill = 'white', linetype = 'blank'))
+
+
+
+
 # sigma1 <- exp(LGCP1_postsamples$thetasamples[[2]])
 # 
 # pal <- rev(RColorBrewer::brewer.pal(11, 'Spectral'))

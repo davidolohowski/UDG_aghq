@@ -24,7 +24,7 @@ library(excursions)
 #compile('src/LGCP_v11_cov_spde_marks.cpp')
 source('src/inla_mesh_dual.R')
 dyn.load(dynlib(file.path("src/LGCP_cov_spde")))
-dyn.load(dynlib(file.path("src/LGCP_cov_spde_marks")))
+dyn.load(dynlib(file.path("src/LGCP_cov_spde_marks_norm")))
 
 # ================================================================ Data pre-processing and Preparation ======================================================================= #
 v_acs <- read_csv('data/v10acs_GC.csv')
@@ -134,7 +134,7 @@ LGCP_fit_no_marks <- aghq::marginal_laplace_tmb(
   startingvalue = c(parameters$log_sigma, parameters$log_rho)
 )
 aghqtime <- difftime(Sys.time(),tm,units = 'secs')
-saveRDS(LGCP_fit_no_marks,file = "LGCP_v10acs_cov_spde_marks/LGCP_v10acs_non_marked.RDS")
+#saveRDS(LGCP_fit_no_marks,file = "LGCP_v10acs_cov_spde_marks/LGCP_v10acs_non_marked.RDS")
 cat("AGHQ took: ",format(aghqtime),"\n")
 
 # projection matrix at the point locations
@@ -212,7 +212,7 @@ obj <- MakeADFun(
   random = c('nodemean', 'intercept', 'beta', 'log_R', 'log_a',
              'intercept_m', 'beta_m', 'log_R_m', 'log_a_m'),
   silent = TRUE,
-  DLL = "LGCP_cov_spde_marks")
+  DLL = "LGCP_cov_spde_marks_norm")
 
 tm <- Sys.time()
 cat("Doing AGHQ, time = ",format(tm),"\n")
@@ -222,7 +222,7 @@ LGCP_fit_weight <- aghq::marginal_laplace_tmb(
   startingvalue = c(parameters$alpha, parameters$log_sigma, parameters$log_rho)
 )
 aghqtime <- difftime(Sys.time(),tm,units = 'secs')
-saveRDS(LGCP_fit_weight,file = "LGCP_v10acs_cov_spde_marks/LGCP_v10acs_weighted_marks.RDS")
+#saveRDS(LGCP_fit_weight,file = "LGCP_v10acs_cov_spde_marks/LGCP_v10acs_weighted_marks.RDS")
 cat("AGHQ took: ",format(aghqtime),"\n")
 
 # ================================================================= Fully marked model ======================================================================= #
@@ -273,7 +273,7 @@ obj <- MakeADFun(
   random = c('nodemean', 'intercept', 'beta', 'log_R', 'log_a',
              'intercept_m', 'beta_m', 'log_R_m', 'log_a_m'),
   silent = TRUE,
-  DLL = "LGCP_cov_spde_marks")
+  DLL = "LGCP_cov_spde_marks_norm")
 
 tm <- Sys.time()
 cat("Doing AGHQ, time = ",format(tm),"\n")
@@ -283,7 +283,7 @@ LGCP_fit_marked <- aghq::marginal_laplace_tmb(
   startingvalue = c(parameters$alpha, parameters$log_sigma, parameters$log_rho)
 )
 aghqtime <- difftime(Sys.time(),tm,units = 'secs')
-saveRDS(LGCP_fit_marked,file = "LGCP_v10acs_cov_spde_marks/LGCP_v10acs_marked.RDS")
+#saveRDS(LGCP_fit_marked,file = "LGCP_v10acs_cov_spde_marks/LGCP_v10acs_marked.RDS")
 cat("AGHQ took: ",format(aghqtime),"\n")
 
 # ============================================================ Post model fitting data analysis ============================================================ #
@@ -443,18 +443,18 @@ saveRDS(exc_prob, 'LGCP_v10acs_cov_spde_marks/exc_prob_v10acs.RDS')
 # 
 # sigma1 <- exp(LGCP1_postsamples$thetasamples[[2]])
 # 
-# pal <- rev(RColorBrewer::brewer.pal(11, 'Spectral'))
-# 
-# ggplot(df, aes(x, y)) +
-#   geom_contour_filled(aes(z = exc0.95), breaks = c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)) +
-#   scale_fill_manual(values = pal, name = '$F(s)$', guide = guide_legend(reverse = T)) +
-#   coord_fixed() +
-#   geom_point(data = v_acs, aes(x,y), size = 0.1, stroke = 0.25, shape = 20) +
-#   xlab('X (pixels)') + ylab('Y (pixels)') +
-#   theme_minimal() +
-#   theme(legend.text = element_text(size = 7),
-#         legend.title = element_text(size = 8),
-#         strip.background = element_rect(color = NULL, fill = 'white', linetype = 'blank'))
+pal <- rev(RColorBrewer::brewer.pal(11, 'Spectral'))
+
+ggplot(df, aes(x, y)) +
+  geom_contour_filled(aes(z = exc0.95), breaks = c(0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)) +
+  scale_fill_manual(values = pal, name = '$F(s)$', guide = guide_legend(reverse = T)) +
+  coord_fixed() +
+  geom_point(data = v_acs, aes(x,y), size = 0.1, stroke = 0.25, shape = 20) +
+  xlab('X (pixels)') + ylab('Y (pixels)') +
+  theme_minimal() +
+  theme(legend.text = element_text(size = 7),
+        legend.title = element_text(size = 8),
+        strip.background = element_rect(color = NULL, fill = 'white', linetype = 'blank'))
 
 
 

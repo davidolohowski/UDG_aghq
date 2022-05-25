@@ -20,7 +20,6 @@ Type objective_function<Type>::operator()()
   DATA_VECTOR(y); // point count in each pixel
   DATA_VECTOR(A); //area of pixel
   DATA_VECTOR(marks); // mark of points
-  DATA_VECTOR(weight); // weight of mark liklelihood
   DATA_MATRIX(gal); //covariate matrix for normal galaxies
   
   int Ng = gal.cols(); //number of normal galaxies
@@ -44,21 +43,10 @@ Type objective_function<Type>::operator()()
   
   // mark process parameters
   PARAMETER(intercept_m);
-  PARAMETER_VECTOR(beta_m);
-  PARAMETER_VECTOR(log_R_m);
-  PARAMETER_VECTOR(log_a_m);
   PARAMETER(alpha);
-  vector<Type> a_m(Ng);
-  for(int i = 0; i < Ng; i++){
-    a_m(i) = exp(log_a_m(i));
-  }
   
   DATA_SCALAR(priormean_intercept_m);
   DATA_SCALAR(priorsd_intercept_m);
-  DATA_VECTOR(priormean_beta_m);
-  DATA_VECTOR(priorsd_beta_m);
-  DATA_VECTOR(priormean_R_m);
-  DATA_VECTOR(priorsd_R_m);
   DATA_SCALAR(priormean_alpha);
   DATA_SCALAR(priorsd_alpha);
   
@@ -96,9 +84,6 @@ Type objective_function<Type>::operator()()
     nll -= dnorm(beta(i), priormean_beta(i), priorsd_beta(i), true);
     nll -= dnorm(log_R(i), priormean_R(i), priorsd_R(i), true);
     nll -= CppAD::CondExpGe(a(i),Type(0), log(1.0)-1.0*a(i), Type(-INFINITY)) + log_a(i);
-    nll -= dnorm(beta_m(i), priormean_beta_m(i), priorsd_beta_m(i), true);
-    nll -= dnorm(log_R_m(i), priormean_R_m(i), priorsd_R_m(i), true);
-    nll -= CppAD::CondExpGe(a_m(i),Type(0), log(1.0)-1.0*a_m(i), Type(-INFINITY)) + log_a_m(i);
   }
   // if(field) {
   // Likelihood of hyperparameters for field. 
@@ -148,13 +133,10 @@ Type objective_function<Type>::operator()()
   int j;
   for(int i = 0; i < n_points; i++) {
     j = n_pixels - n_points + i;
-    linear_pred_mark[i] = intercept_m + 1 / alpha * linear_pred_field[j];
-    for(int k = 0; k < Ng; k++) {
-      linear_pred_mark[i] += beta_m(k) * exp(-pow(gal(j,k)/pow(exp(log_R_m(k)), 2.0), a_m(k)));
-    }
+    linear_pred_mark[i] = intercept_m + alpha * linear_pred_field[j];
   }
   for(int i = 0; i < n_points; i++){
-    nll -= weight[i] * (linear_pred_mark[i] - exp(linear_pred_mark[i])*marks[i]);
+    nll -= -linear_pred_mark[i] - 0.5*exp(-2.0*linear_pred_mark[i])*pow(marks[i],2.0);
   }
   
   REPORT(rho);
@@ -164,9 +146,6 @@ Type objective_function<Type>::operator()()
   REPORT(log_R);
   REPORT(a);
   REPORT(intercept_m);
-  REPORT(beta_m);
-  REPORT(log_R_m);
-  REPORT(a_m);
   REPORT(alpha);
   REPORT(nodemean);
   REPORT(nll_priors);
